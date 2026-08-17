@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>泡茶計時</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap');
+
+  :root{
+    --ink: #E9E3D4;
+    --ink-dim: #A7A08C;
+    --leaf-deep: #17251F;
+    --leaf: #1F332B;
+    --leaf-light: #2B4438;
+    --amber: #C99A3D;
+    --amber-bright: #E0B563;
+    --clay: #9C5A3C;
+    --ring-track: rgba(233,227,212,0.10);
+  }
+
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: radial-gradient(ellipse at 50% -10%, var(--leaf-light) 0%, var(--leaf) 45%, var(--leaf-deep) 100%);
+    color: var(--ink);
+    font-family: 'Zen Kaku Gothic New', 'Noto Sans TC', sans-serif;
+    overflow: hidden;
+  }
+
+  .stage{
+    height: 100dvh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: env(safe-area-inset-top, 28px) 20px calc(env(safe-area-inset-bottom, 20px) + 16px);
+    position: relative;
+  }
+
+  /* steam texture, ambient */
+  .steam{
+    position:absolute; top:0; left:0; right:0; height:40%;
+    pointer-events:none; opacity:0.35; mix-blend-mode: screen;
+    background:
+      radial-gradient(60px 140px at 30% 0%, rgba(233,227,212,0.08), transparent 70%),
+      radial-gradient(50px 120px at 55% 0%, rgba(233,227,212,0.06), transparent 70%),
+      radial-gradient(70px 160px at 75% 0%, rgba(233,227,212,0.05), transparent 70%);
+    animation: drift 9s ease-in-out infinite alternate;
+  }
+  @keyframes drift{
+    from{ transform: translateY(0) scaleY(1); }
+    to{ transform: translateY(-8px) scaleY(1.06); }
+  }
+
+  header{ text-align:center; z-index:1; }
+  .eyebrow{
+    font-family:'Noto Serif TC', serif;
+    font-size: 13px; letter-spacing: 0.35em; color: var(--ink-dim);
+    margin: 0 0 6px;
+  }
+  h1{
+    font-family:'Noto Serif TC', serif;
+    font-weight: 700;
+    font-size: 22px; margin:0; letter-spacing: 0.06em;
+    color: var(--ink);
+  }
+
+  /* infusion dots — order carries real info here (which steep you're on) */
+  .dots{
+    display:flex; gap: 10px; margin-top: 18px; z-index:1;
+  }
+  .dot{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    font-family:'Noto Serif TC', serif; font-size: 11px; color: var(--ink-dim);
+  }
+  .dot .mark{
+    width: 9px; height:9px; border-radius:50%;
+    background: rgba(233,227,212,0.18);
+    border: 1px solid rgba(233,227,212,0.25);
+    transition: all .4s ease;
+  }
+  .dot.done .mark{ background: var(--amber); border-color: var(--amber); }
+  .dot.active .mark{
+    background: var(--amber-bright);
+    border-color: var(--amber-bright);
+    box-shadow: 0 0 0 4px rgba(224,181,99,0.18);
+  }
+  .dot.active span{ color: var(--amber-bright); }
+
+  /* main ring */
+  .ring-wrap{
+    position: relative;
+    width: min(72vw, 300px); height: min(72vw, 300px);
+    display:flex; align-items:center; justify-content:center;
+    z-index:1;
+  }
+  svg{ width:100%; height:100%; transform: rotate(-90deg); }
+  .track{ fill:none; stroke: var(--ring-track); stroke-width: 5; }
+  .progress{
+    fill:none; stroke: var(--amber-bright); stroke-width: 5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear;
+    filter: drop-shadow(0 0 10px rgba(224,181,99,0.35));
+  }
+  .ring-center{
+    position:absolute; display:flex; flex-direction:column; align-items:center;
+  }
+  .infusion-label{
+    font-family:'Noto Serif TC', serif; font-size: 15px; color: var(--amber-bright);
+    letter-spacing: 0.08em; margin-bottom: 6px;
+  }
+  .time{
+    font-family:'Noto Serif TC', serif; font-weight: 700;
+    font-size: min(15vw, 68px); line-height:1; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .sub{
+    margin-top: 10px; font-size: 13px; color: var(--ink-dim); letter-spacing: 0.04em;
+  }
+
+  /* controls */
+  .controls{
+    display:flex; align-items:center; gap: 18px; z-index:1;
+  }
+  button{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    border: none; cursor: pointer; -webkit-appearance: none;
+  }
+  .btn-primary{
+    width: 84px; height: 84px; border-radius: 50%;
+    background: linear-gradient(155deg, var(--amber-bright), var(--clay));
+    color: #1B120A; font-size: 15px; font-weight: 700; letter-spacing: 0.05em;
+    box-shadow: 0 8px 24px rgba(201,154,61,0.35), inset 0 1px 1px rgba(255,255,255,0.4);
+    transition: transform .15s ease;
+  }
+  .btn-primary:active{ transform: scale(0.94); }
+
+  .btn-ghost{
+    width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(233,227,212,0.06);
+    border: 1px solid rgba(233,227,212,0.15);
+    color: var(--ink-dim);
+    font-size: 18px;
+    display:flex; align-items:center; justify-content:center;
+    transition: all .15s ease;
+  }
+  .btn-ghost:active{ transform: scale(0.9); background: rgba(233,227,212,0.12); }
+
+  .reset-row{
+    margin-top: 4px; z-index:1;
+  }
+  .link-btn{
+    background:none; color: var(--ink-dim); font-size: 12px;
+    letter-spacing: 0.08em; padding: 8px; opacity: 0.7;
+  }
+  .link-btn:active{ opacity: 1; }
+
+  .finished .time{ color: var(--amber-bright); }
+
+  @keyframes pulse{
+    0%,100%{ box-shadow: 0 0 0 0 rgba(224,181,99,0.4); }
+    50%{ box-shadow: 0 0 0 14px rgba(224,181,99,0); }
+  }
+  .ringing .ring-wrap{ animation: pulse 1s ease-out 3; border-radius: 50%; }
+
+  @media (prefers-reduced-motion: reduce){
+    .steam{ animation: none; }
+    .ringing .ring-wrap{ animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="steam"></div>
+
+  <header>
+    <p class="eyebrow">TEA TIMER · 六泡</p>
+    <h1>今天泡到第幾泡了？</h1>
+    <div class="dots" id="dots"></div>
+  </header>
+
+  <div class="ring-wrap">
+    <svg viewBox="0 0 200 200">
+      <circle class="track" cx="100" cy="100" r="90"></circle>
+      <circle class="progress" id="progressRing" cx="100" cy="100" r="90"></circle>
+    </svg>
+    <div class="ring-center">
+      <div class="infusion-label" id="infusionLabel">第 1 泡</div>
+      <div class="time" id="timeDisplay">0:50</div>
+      <div class="sub" id="subLabel">準備好了就按開始</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="controls">
+      <button class="btn-ghost" id="prevBtn" aria-label="上一泡">‹</button>
+      <button class="btn-primary" id="startBtn">開始</button>
+      <button class="btn-ghost" id="nextBtn" aria-label="下一泡">›</button>
+    </div>
+    <div class="reset-row">
+      <button class="link-btn" id="resetBtn">重新從第 1 泡開始</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const TIMES = [50, 40, 45, 50, 55, 60]; // 第1~6泡秒數
+  const STORAGE_KEY = 'tea-timer-state-v1';
+
+  let state = {
+    idx: 0,          // 0-based infusion index
+    remaining: TIMES[0],
+    running: false,
+    endAt: null       // timestamp (ms) when countdown should hit 0, while running
+  };
+
+  // restore
+  try {
+    const saved = JSON.parse(localStorageSafeGet());
+    if (saved && typeof saved.idx === 'number' && saved.idx >=0 && saved.idx < TIMES.length) {
+      state.idx = saved.idx;
+      state.remaining = (typeof saved.remaining === 'number') ? saved.remaining : TIMES[saved.idx];
+    }
+  } catch(e){}
+
+  function localStorageSafeGet(){
+    // artifacts sandbox disallows localStorage; use in-memory fallback via window var
+    return window.__teaTimerState ? JSON.stringify(window.__teaTimerState) : 'null';
+  }
+  function persist(){
+    window.__teaTimerState = { idx: state.idx, remaining: state.remaining };
+  }
+
+  const dotsEl = document.getElementById('dots');
+  const timeDisplay = document.getElementById('timeDisplay');
+  const infusionLabel = document.getElementById('infusionLabel');
+  const subLabel = document.getElementById('subLabel');
+  const startBtn = document.getElementById('startBtn');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const stage = document.getElementById('stage');
+  const ring = document.getElementById('progressRing');
+
+  const R = 90;
+  const CIRC = 2 * Math.PI * R;
+  ring.style.strokeDasharray = CIRC;
+
+  let timerId = null;
+  let completedUpTo = -1; // highest idx fully completed
+
+  function buildDots(){
+    dotsEl.innerHTML = '';
+    TIMES.forEach((t, i) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'dot';
+      wrap.id = 'dot-' + i;
+      wrap.innerHTML = '<div class="mark"></div><span>' + (i+1) + '</span>';
+      dotsEl.appendChild(wrap);
+    });
+  }
+
+  function fmt(sec){
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function render(){
+    const total = TIMES[state.idx];
+    infusionLabel.textContent = '第 ' + (state.idx + 1) + ' 泡';
+    timeDisplay.textContent = fmt(state.remaining);
+    const frac = state.remaining / total;
+    ring.style.strokeDashoffset = CIRC * (1 - frac);
+
+    startBtn.textContent = state.running ? '暫停' : (state.remaining === total ? '開始' : '繼續');
+
+    if (state.remaining === 0) {
+      subLabel.textContent = '這泡好了，換下一泡吧';
+    } else if (state.running) {
+      subLabel.textContent = '沖泡中…';
+    } else {
+      subLabel.textContent = (state.remaining === total) ? '準備好了就按開始' : '已暫停';
+    }
+
+    document.querySelectorAll('.dot').forEach((d, i) => {
+      d.classList.remove('active', 'done');
+      if (i < state.idx || (i === state.idx && state.remaining === 0 && i < TIMES.length - 1)) {
+        d.classList.add('done');
+      }
+      if (i === state.idx) d.classList.add('active');
+    });
+
+    prevBtn.disabled = state.idx === 0;
+    nextBtn.disabled = state.idx === TIMES.length - 1;
+    prevBtn.style.opacity = prevBtn.disabled ? 0.3 : 1;
+    nextBtn.style.opacity = nextBtn.disabled ? 0.3 : 1;
+
+    persist();
+  }
+
+  function beep(){
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = ctx.currentTime;
+      [0, 0.28, 0.56].forEach((offset, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = 880;
+        g.gain.setValueAtTime(0, now + offset);
+        g.gain.linearRampToValueAtTime(0.3, now + offset + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.22);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(now + offset);
+        o.stop(now + offset + 0.25);
+      });
+    } catch(e){}
+    if (navigator.vibrate) { try { navigator.vibrate([200,100,200]); } catch(e){} }
+  }
+
+  // Recompute remaining from the wall-clock end time. This makes the
+  // countdown correct even if setInterval was throttled/paused while the
+  // tab or app was backgrounded or the screen was locked.
+  function sync(){
+    if (!state.running || state.endAt === null) return;
+    const remainingMs = state.endAt - Date.now();
+    const newRemaining = Math.max(0, Math.ceil(remainingMs / 1000));
+    if (newRemaining !== state.remaining) {
+      state.remaining = newRemaining;
+    }
+    if (state.remaining === 0) {
+      handleFinish();
+    }
+  }
+
+  function handleFinish(){
+    stopInterval();
+    state.running = false;
+    state.endAt = null;
+    beep();
+    stage.classList.add('ringing');
+    setTimeout(() => stage.classList.remove('ringing'), 3200);
+    if (state.idx < TIMES.length - 1) {
+      setTimeout(() => {
+        state.idx += 1;
+        state.remaining = TIMES[state.idx];
+        render();
+      }, 1400);
+    } else {
+      subLabel.textContent = '六泡都完成了，辛苦了！';
+    }
+    render();
+  }
+
+  function tick(){
+    sync();
+    render();
+  }
+
+  function startInterval(){
+    if (timerId) return;
+    timerId = setInterval(tick, 1000);
+  }
+  function stopInterval(){
+    if (timerId) { clearInterval(timerId); timerId = null; }
+  }
+
+  // When returning to the tab/app (or unlocking the screen), immediately
+  // resync instead of waiting for the next 1s tick.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.running) {
+      sync();
+      render();
+    }
+  });
+  window.addEventListener('focus', () => {
+    if (state.running) { sync(); render(); }
+  });
+  window.addEventListener('pageshow', () => {
+    if (state.running) { sync(); render(); }
+  });
+
+  startBtn.addEventListener('click', () => {
+    if (state.remaining === 0) {
+      // move forward if possible
+      if (state.idx < TIMES.length - 1) {
+        state.idx += 1;
+        state.remaining = TIMES[state.idx];
+      }
+      render();
+      return;
+    }
+    state.running = !state.running;
+    if (state.running) {
+      state.endAt = Date.now() + state.remaining * 1000;
+      startInterval();
+    } else {
+      stopInterval();
+      state.endAt = null;
+    }
+    render();
+  });
+
+  prevBtn.addEventListener('click', () => {
+    if (state.idx === 0) return;
+    stopInterval();
+    state.running = false;
+    state.endAt = null;
+    state.idx -= 1;
+    state.remaining = TIMES[state.idx];
+    render();
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if (state.idx === TIMES.length - 1) return;
+    stopInterval();
+    state.running = false;
+    state.endAt = null;
+    state.idx += 1;
+    state.remaining = TIMES[state.idx];
+    render();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    stopInterval();
+    state.running = false;
+    state.endAt = null;
+    state.idx = 0;
+    state.remaining = TIMES[0];
+    render();
+  });
+
+  buildDots();
+  render();
+})();
+</script>
+</body>
+</html>
